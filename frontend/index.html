@@ -290,9 +290,8 @@
     </header>
 
     <main class="messages" id="messages" role="log" aria-live="polite">
-      <p class="welcome-hint">
-        歡迎！輸入文字或傳送照片試試看。<br>
-        送出後會模擬妞妞太郎回覆，並有震動回饋。<br>
+      <p class="welcome-hint" id="welcome-hint">
+        歡迎！輸入文字或傳送照片跟妞妞太郎聊天。<br>
         <small>可將此頁「加入主畫面」當成 App 使用。</small>
       </p>
     </main>
@@ -325,6 +324,7 @@
     (function () {
       "use strict";
 
+      const API_URL = "https://niuniu-chat-production.up.railway.app";
       const tg = window.Telegram && window.Telegram.WebApp;
 
       function applyTelegramTheme() {
@@ -378,14 +378,61 @@
       let pendingPhoto   = null;
 
       const BOT_NAME = "妞妞太郎";
-      const REPLY_TEXTS = [
-        "收到你的訊息了！😊",
-        "好的，我了解了～",
-        "謝謝分享！",
-        "這個想法很棒！",
-        "讓我想想怎麼回你…",
-        "哈哈，有意思！",
-      ];
+
+      function apiHeaders() {
+        const headers = { "Content-Type": "application/json" };
+        if (tg && tg.initData) {
+          headers["X-Telegram-Init-Data"] = tg.initData;
+        }
+        return headers;
+      }
+
+      function formatTime(iso) {
+        if (!iso) return nowTime();
+        return new Date(iso).toLocaleTimeString("zh-TW", {
+          hour: "2-digit", minute: "2-digit",
+        });
+      }
+
+      function clearMessageBubbles() {
+        messagesEl.querySelectorAll(".message").forEach(function (el) {
+          el.remove();
+        });
+        welcomeRemoved = false;
+      }
+
+      function renderFromApi(msg) {
+        createBubble({
+          side: msg.sender === "user" ? "me" : "other",
+          sender: msg.sender === "user" ? "我" : BOT_NAME,
+          text: msg.text || "",
+          imageSrc: msg.image_url || null,
+          time: formatTime(msg.created_at),
+        });
+      }
+
+      async function loadMessages() {
+        try {
+          const res = await fetch(API_URL + "/api/messages", {
+            headers: apiHeaders(),
+          });
+          if (!res.ok) throw new Error("load failed");
+
+          const data = await res.json();
+          clearMessageBubbles();
+
+          if (!data.messages || data.messages.length === 0) {
+            const hint = document.getElementById("welcome-hint");
+            if (hint) hint.style.display = "";
+            return;
+          }
+
+          removeWelcome();
+          data.messages.forEach(renderFromApi);
+        } catch (_) {
+          statusText.textContent = "無法載入訊息";
+        }
+      }
 
       function nowTime() {
         return new Date().toLocaleTimeString("zh-TW", {
@@ -465,36 +512,39 @@
         scrollToBottom();
       }
 
-      function simulateReply(userSentPhoto) {
-        setTimeout(function () {
-          const replyText = userSentPhoto
-            ? "照片收到了，很好看！📷"
-            : REPLY_TEXTS[Math.floor(Math.random() * REPLY_TEXTS.length)];
-
-          createBubble({ side: "other", sender: BOT_NAME, text: replyText });
-          triggerHaptic("success");
-        }, 800 + Math.random() * 700);
-      }
-
-      function sendMessage() {
+      async function sendMessage() {
         const text = textInput.value.trim();
         const hasPhoto = !!pendingPhoto;
         if (!text && !hasPhoto) return;
 
         triggerImpact("medium");
+        btnSend.disabled = true;
 
-        createBubble({
-          side: "me",
-          sender: "我",
-          text: text || (hasPhoto ? "（照片）" : ""),
-          imageSrc: hasPhoto ? pendingPhoto.dataUrl : null,
-        });
+        try {
+          const res = await fetch(API_URL + "/api/messages", {
+            method: "POST",
+            headers: apiHeaders(),
+            body: JSON.stringify({
+              text: text || null,
+              imageUrl: hasPhoto ? pendingPhoto.dataUrl : null,
+            }),
+          });
 
-        textInput.value = "";
-        autoResizeTextarea();
-        pendingPhoto = null;
-        updateSendButton();
-        simulateReply(hasPhoto);
+          if (!res.ok) throw new Error("send failed");
+
+          textInput.value = "";
+          autoResizeTextarea();
+          pendingPhoto = null;
+          textInput.placeholder = "輸入訊息…";
+
+          await loadMessages();
+          triggerHaptic("success");
+        } catch (_) {
+          statusText.textContent = "送出失敗，請稍後再試";
+          triggerHaptic("error");
+        } finally {
+          updateSendButton();
+        }
       }
 
       function autoResizeTextarea() {
@@ -548,18 +598,11 @@
         statusText.textContent = "Telegram Mini App 已連線";
       } else if (window.matchMedia("(display-mode: standalone)").matches) {
         statusText.textContent = "已從主畫面開啟";
+      } else {
+        statusText.textContent = "已連線";
       }
 
-      setTimeout(function () {
-        createBubble({
-          side: "other", sender: BOT_NAME,
-          text: "哈囉！我是妞妞太郎 👋",
-        });
-        createBubble({
-          side: "other", sender: BOT_NAME,
-          text: "你可以輸入文字或傳照片，試試看吧！",
-        });
-      }, 300);
+      loadMessages();
     })();
   </script>
 </body>

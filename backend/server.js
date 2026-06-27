@@ -16,6 +16,15 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
   .map(function (s) { return s.trim(); })
   .filter(Boolean);
 
+const REPLY_TEXTS = [
+  "收到你的訊息了！😊",
+  "好的，我了解了～",
+  "謝謝分享！",
+  "這個想法很棒！",
+  "讓我想想怎麼回你…",
+  "哈哈，有意思！",
+];
+
 const supabase = SUPABASE_URL && SUPABASE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_KEY)
   : null;
@@ -70,11 +79,21 @@ function authMiddleware(req, res, next) {
   const initData = req.headers["x-telegram-init-data"] || req.body.initData;
   const user = validateInitData(initData);
 
-  if (!user && process.env.NODE_ENV === "production") {
+  if (user) {
+    req.telegramUser = user;
+    return next();
+  }
+
+  if (process.env.ALLOW_DEV_USER === "true") {
+    req.telegramUser = { id: 0, first_name: "Dev" };
+    return next();
+  }
+
+  if (process.env.NODE_ENV === "production") {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  req.telegramUser = user || { id: 0, first_name: "Dev" };
+  req.telegramUser = { id: 0, first_name: "Dev" };
   next();
 }
 
@@ -152,8 +171,23 @@ app.post("/api/messages", authMiddleware, async function (req, res) {
 
   if (error) return res.status(500).json({ error: error.message });
 
-  /* TODO: 在此觸發 Bot 回覆邏輯，並 insert sender='bot' 的訊息 */
-  res.json({ message: data });
+  const replyText = imageUrl
+    ? "照片收到了，很好看！📷"
+    : REPLY_TEXTS[Math.floor(Math.random() * REPLY_TEXTS.length)];
+
+  const { data: botMsg, error: botError } = await supabase
+    .from("messages")
+    .insert({
+      user_id: req.telegramUser.id,
+      sender: "bot",
+      text: replyText,
+    })
+    .select()
+    .single();
+
+  if (botError) return res.status(500).json({ error: botError.message });
+
+  res.json({ message: data, reply: botMsg });
 });
 
 app.listen(PORT, function () {
