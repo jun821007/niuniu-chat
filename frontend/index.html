@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+  <meta name="theme-color" content="#17212B">
+  <meta name="description" content="與妞妞太郎聊天的 Telegram Mini App">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="妞妞太郎">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon.svg">
+  <title>妞妞太郎</title>
+
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <style>
+    :root {
+      --font-base: clamp(1.125rem, 1rem + 0.6vw, 1.25rem);
+      --font-sm: clamp(1rem, 0.95rem + 0.3vw, 1.125rem);
+      --font-lg: clamp(1.25rem, 1.1rem + 0.8vw, 1.375rem);
+
+      --bg-page: #0E1621;
+      --bg-header: #17212B;
+      --bg-input: #17212B;
+      --bg-bubble-me: #2B5278;
+      --bg-bubble-other: #182533;
+      --text-primary: #FFFFFF;
+      --text-secondary: #708499;
+      --accent: #5288C1;
+      --accent-hover: #6AB2F2;
+      --border: #1F2C3A;
+      --shadow: rgba(0, 0, 0, 0.25);
+      --btn-icon-bg: #232E3C;
+      --btn-icon-active: #2A3847;
+      --placeholder: #5D6E7E;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 100%;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, "Noto Sans TC", "PingFang TC",
+        "Microsoft JhengHei", sans-serif;
+      font-size: var(--font-base);
+      line-height: 1.55;
+      color: var(--text-primary);
+      background: var(--bg-page);
+      height: 100dvh;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    .header {
+      flex-shrink: 0;
+      padding: 0.875rem 1rem;
+      background: var(--bg-header);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header__info h1 {
+      font-size: var(--font-lg);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .header__info p {
+      font-size: var(--font-sm);
+      color: var(--text-secondary);
+      margin-top: 0.15rem;
+    }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem 0.875rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .message {
+      display: flex;
+      flex-direction: column;
+      max-width: 82%;
+      animation: fadeIn 0.25s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .message--me {
+      align-self: flex-end;
+      align-items: flex-end;
+    }
+
+    .message--other {
+      align-self: flex-start;
+      align-items: flex-start;
+    }
+
+    .message__sender {
+      font-size: var(--font-sm);
+      color: var(--text-secondary);
+      margin-bottom: 0.25rem;
+      padding: 0 0.25rem;
+    }
+
+    .message__bubble {
+      padding: 0.65rem 0.9rem;
+      border-radius: 1.125rem;
+      word-break: break-word;
+      box-shadow: 0 2px 8px var(--shadow);
+    }
+
+    .message--me .message__bubble {
+      background: var(--bg-bubble-me);
+      border-bottom-right-radius: 0.35rem;
+    }
+
+    .message--other .message__bubble {
+      background: var(--bg-bubble-other);
+      border-bottom-left-radius: 0.35rem;
+    }
+
+    .message__bubble img {
+      display: block;
+      max-width: 100%;
+      max-height: 240px;
+      border-radius: 0.75rem;
+      margin-top: 0.25rem;
+    }
+
+    .message__bubble img:first-child {
+      margin-top: 0;
+    }
+
+    .message__time {
+      font-size: var(--font-sm);
+      color: var(--text-secondary);
+      margin-top: 0.2rem;
+      padding: 0 0.25rem;
+    }
+
+    .welcome-hint {
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: var(--font-sm);
+      padding: 1.5rem 1rem;
+      line-height: 1.7;
+    }
+
+    .input-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-end;
+      gap: 0.5rem;
+      padding: 0.65rem 0.75rem calc(0.65rem + var(--safe-bottom));
+      background: var(--bg-input);
+      border-top: 1px solid var(--border);
+    }
+
+    .btn-icon {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.75rem;
+      height: 2.75rem;
+      border: none;
+      border-radius: 50%;
+      background: var(--btn-icon-bg);
+      color: var(--accent-hover);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .btn-icon:active {
+      transform: scale(0.93);
+      background: var(--btn-icon-active);
+    }
+
+    .btn-icon svg {
+      width: 1.35rem;
+      height: 1.35rem;
+    }
+
+    .input-wrap {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .input-wrap textarea {
+      display: block;
+      width: 100%;
+      min-height: 2.75rem;
+      max-height: 7rem;
+      padding: 0.6rem 0.85rem;
+      font-family: inherit;
+      font-size: var(--font-base);
+      line-height: 1.45;
+      color: var(--text-primary);
+      background: var(--btn-icon-bg);
+      border: 1.5px solid var(--border);
+      border-radius: 1.25rem;
+      resize: none;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .input-wrap textarea::placeholder {
+      color: var(--placeholder);
+    }
+
+    .input-wrap textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .btn-send {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.75rem;
+      height: 2.75rem;
+      border: none;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .btn-send:active {
+      transform: scale(0.93);
+      background: var(--accent-hover);
+    }
+
+    .btn-send:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-send svg {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+
+    #photo-input {
+      display: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .message { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header__info">
+        <h1>妞妞太郎</h1>
+        <p id="status-text">前端預覽模式</p>
+      </div>
+    </header>
+
+    <main class="messages" id="messages" role="log" aria-live="polite">
+      <p class="welcome-hint">
+        歡迎！輸入文字或傳送照片試試看。<br>
+        送出後會模擬妞妞太郎回覆，並有震動回饋。<br>
+        <small>可將此頁「加入主畫面」當成 App 使用。</small>
+      </p>
+    </main>
+
+    <footer class="input-bar">
+      <input type="file" id="photo-input" accept="image/*" aria-hidden="true">
+      <button class="btn-icon" id="btn-photo" type="button" aria-label="傳送照片">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="M21 15l-5-5L5 21"/>
+        </svg>
+      </button>
+
+      <div class="input-wrap">
+        <textarea id="text-input" rows="1" placeholder="輸入訊息…"
+                  aria-label="訊息輸入框"></textarea>
+      </div>
+
+      <button class="btn-send" id="btn-send" type="button" aria-label="送出訊息" disabled>
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+        </svg>
+      </button>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      "use strict";
+
+      const tg = window.Telegram && window.Telegram.WebApp;
+
+      function applyTelegramTheme() {
+        const root = document.documentElement;
+        const p = tg && tg.themeParams;
+        if (!p) return;
+
+        const map = {
+          bg_color: "--bg-page",
+          secondary_bg_color: ["--bg-header", "--bg-input", "--btn-icon-bg"],
+          text_color: "--text-primary",
+          hint_color: ["--text-secondary", "--placeholder"],
+          link_color: "--accent-hover",
+          button_color: ["--accent", "--bg-bubble-me"],
+        };
+
+        Object.keys(map).forEach(function (key) {
+          if (!p[key]) return;
+          const vars = map[key];
+          (Array.isArray(vars) ? vars : [vars]).forEach(function (v) {
+            root.style.setProperty(v, p[key]);
+          });
+        });
+
+        if (p.bg_color) {
+          document.querySelector('meta[name="theme-color"]')
+            .setAttribute("content", p.bg_color);
+        }
+      }
+
+      if (tg) {
+        tg.ready();
+        tg.expand();
+        applyTelegramTheme();
+      }
+
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", function () {
+          navigator.serviceWorker.register("/sw.js").catch(function () {});
+        });
+      }
+
+      const messagesEl = document.getElementById("messages");
+      const textInput  = document.getElementById("text-input");
+      const btnSend    = document.getElementById("btn-send");
+      const btnPhoto   = document.getElementById("btn-photo");
+      const photoInput = document.getElementById("photo-input");
+      const statusText = document.getElementById("status-text");
+
+      let welcomeRemoved = false;
+      let pendingPhoto   = null;
+
+      const BOT_NAME = "妞妞太郎";
+      const REPLY_TEXTS = [
+        "收到你的訊息了！😊",
+        "好的，我了解了～",
+        "謝謝分享！",
+        "這個想法很棒！",
+        "讓我想想怎麼回你…",
+        "哈哈，有意思！",
+      ];
+
+      function nowTime() {
+        return new Date().toLocaleTimeString("zh-TW", {
+          hour: "2-digit", minute: "2-digit",
+        });
+      }
+
+      function removeWelcome() {
+        if (welcomeRemoved) return;
+        const hint = messagesEl.querySelector(".welcome-hint");
+        if (hint) hint.remove();
+        welcomeRemoved = true;
+      }
+
+      function scrollToBottom() {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function triggerHaptic(type) {
+        if (tg && tg.HapticFeedback) {
+          tg.HapticFeedback.notificationOccurred(type || "success");
+        } else if (navigator.vibrate) {
+          navigator.vibrate(80);
+        }
+      }
+
+      function triggerImpact(style) {
+        if (tg && tg.HapticFeedback) {
+          tg.HapticFeedback.impactOccurred(style || "light");
+        }
+      }
+
+      function createBubble(options) {
+        removeWelcome();
+
+        const wrap = document.createElement("div");
+        wrap.className = "message message--" + (options.side === "me" ? "me" : "other");
+
+        if (options.sender) {
+          const senderEl = document.createElement("span");
+          senderEl.className = "message__sender";
+          senderEl.textContent = options.sender;
+          wrap.appendChild(senderEl);
+        }
+
+        const bubble = document.createElement("div");
+        bubble.className = "message__bubble";
+
+        if (options.imageSrc) {
+          const img = document.createElement("img");
+          img.src = options.imageSrc;
+          img.alt = "已傳送的圖片";
+          img.loading = "lazy";
+          bubble.appendChild(img);
+        }
+
+        if (options.text) {
+          const textNode = document.createTextNode(options.text);
+          if (options.imageSrc) {
+            const p = document.createElement("p");
+            p.style.marginTop = "0.4rem";
+            p.appendChild(textNode);
+            bubble.appendChild(p);
+          } else {
+            bubble.appendChild(textNode);
+          }
+        }
+
+        wrap.appendChild(bubble);
+
+        const timeEl = document.createElement("span");
+        timeEl.className = "message__time";
+        timeEl.textContent = options.time || nowTime();
+        wrap.appendChild(timeEl);
+
+        messagesEl.appendChild(wrap);
+        scrollToBottom();
+      }
+
+      function simulateReply(userSentPhoto) {
+        setTimeout(function () {
+          const replyText = userSentPhoto
+            ? "照片收到了，很好看！📷"
+            : REPLY_TEXTS[Math.floor(Math.random() * REPLY_TEXTS.length)];
+
+          createBubble({ side: "other", sender: BOT_NAME, text: replyText });
+          triggerHaptic("success");
+        }, 800 + Math.random() * 700);
+      }
+
+      function sendMessage() {
+        const text = textInput.value.trim();
+        const hasPhoto = !!pendingPhoto;
+        if (!text && !hasPhoto) return;
+
+        triggerImpact("medium");
+
+        createBubble({
+          side: "me",
+          sender: "我",
+          text: text || (hasPhoto ? "（照片）" : ""),
+          imageSrc: hasPhoto ? pendingPhoto.dataUrl : null,
+        });
+
+        textInput.value = "";
+        autoResizeTextarea();
+        pendingPhoto = null;
+        updateSendButton();
+        simulateReply(hasPhoto);
+      }
+
+      function autoResizeTextarea() {
+        textInput.style.height = "auto";
+        textInput.style.height = Math.min(textInput.scrollHeight, 112) + "px";
+      }
+
+      function updateSendButton() {
+        btnSend.disabled = !(textInput.value.trim() || pendingPhoto);
+      }
+
+      function handlePhotoSelect(file) {
+        if (!file || !file.type.startsWith("image/")) return;
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          pendingPhoto = { dataUrl: e.target.result, name: file.name };
+          triggerImpact("light");
+          updateSendButton();
+          textInput.placeholder = "已選擇「" + file.name + "」，按送出傳送";
+          textInput.focus();
+        };
+        reader.readAsDataURL(file);
+      }
+
+      textInput.addEventListener("input", function () {
+        autoResizeTextarea();
+        updateSendButton();
+        if (textInput.value.trim()) textInput.placeholder = "輸入訊息…";
+      });
+
+      textInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          if (!btnSend.disabled) sendMessage();
+        }
+      });
+
+      btnSend.addEventListener("click", sendMessage);
+      btnPhoto.addEventListener("click", function () {
+        triggerImpact("light");
+        photoInput.click();
+      });
+      photoInput.addEventListener("change", function () {
+        if (photoInput.files && photoInput.files[0]) {
+          handlePhotoSelect(photoInput.files[0]);
+        }
+        photoInput.value = "";
+      });
+
+      if (tg) {
+        statusText.textContent = "Telegram Mini App 已連線";
+      } else if (window.matchMedia("(display-mode: standalone)").matches) {
+        statusText.textContent = "已從主畫面開啟";
+      }
+
+      setTimeout(function () {
+        createBubble({
+          side: "other", sender: BOT_NAME,
+          text: "哈囉！我是妞妞太郎 👋",
+        });
+        createBubble({
+          side: "other", sender: BOT_NAME,
+          text: "你可以輸入文字或傳照片，試試看吧！",
+        });
+      }, 300);
+    })();
+  </script>
+</body>
+</html>
