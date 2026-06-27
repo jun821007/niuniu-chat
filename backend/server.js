@@ -20,10 +20,16 @@ const REPLY_TEXTS = [
   "收到你的訊息了！😊",
   "好的，我了解了～",
   "謝謝分享！",
-  "這個想法很棒！",
-  "讓我想想怎麼回你…",
-  "哈哈，有意思！",
 ];
+
+const OPENCLAW_GATEWAY_URL = (process.env.OPENCLAW_GATEWAY_URL || "").replace(/\/$/, "");
+const OPENCLAW_HOOK_TOKEN =
+  process.env.OPENCLAW_HOOK_TOKEN ||
+  process.env.OPENCLAW_HOOKS_TOKEN ||
+  process.env.WEBHOOK_TOKEN ||
+  "";
+const OPENCLAW_AGENT_ID = process.env.OPENCLAW_AGENT_ID || "";
+const OPENCLAW_TIMEOUT = Number(process.env.OPENCLAW_TIMEOUT_SECONDS || 120);
 
 const supabase = SUPABASE_URL && SUPABASE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_KEY)
@@ -109,6 +115,73 @@ async function upsertUser(user) {
   });
 }
 
+function buildAgentPrompt(text, imageUrl) {
+  if (imageUrl && text) {
+    return text + "\n\n（使用者同時傳了一張照片）";
+  }
+  if (imageUrl) {
+    return "使用者傳了一張照片，請用妞妞太郎的語氣簡短回應。";
+  }
+  return text;
+}
+
+function extractOpenClawText(data) {
+  if (!data) return null;
+  return data.text || data.outputText || data.result || null;
+}
+
+async function askOpenClaw(userId, prompt) {
+  if (!OPENCLAW_GATEWAY_URL || !OPENCLAW_HOOK_TOKEN) {
+    return null;
+  }
+
+  const payload = {
+    message: prompt,
+    name: "MiniApp",
+    sessionKey: "hook:niuniu:" + userId,
+    deliver: false,
+    blocking: true,
+    timeoutSeconds: OPENCLAW_TIMEOUT,
+  };
+
+  if (OPENCLAW_AGENT_ID) {
+    payload.agentId = OPENCLAW_AGENT_ID;
+  }
+
+  const res = await fetch(OPENCLAW_GATEWAY_URL + "/hooks/agent", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + OPENCLAW_HOOK_TOKEN,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json().catch(function () { return {}; });
+
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.error || ("OpenClaw HTTP " + res.status));
+  }
+
+  const reply = extractOpenClawText(data);
+  if (!reply) {
+    throw new Error("OpenClaw 沒有回傳文字");
+  }
+
+  return String(reply).trim();
+}
+
+async function getBotReply(userId, text, imageUrl) {
+  const prompt = buildAgentPrompt(text, imageUrl);
+
+  if (OPENCLAW_GATEWAY_URL && OPENCLAW_HOOK_TOKEN) {
+    return askOpenClaw(userId, prompt);
+  }
+
+  if (imageUrl) return "照片收到了！📷";
+  return REPLY_TEXTS[Math.floor(Math.random() * REPLY_TEXTS.length)];
+}
+
 /* ── 路由 ── */
 
 app.get("/health", function (_req, res) {
@@ -116,6 +189,7 @@ app.get("/health", function (_req, res) {
     ok: true,
     supabase: !!supabase,
     bot: !!BOT_TOKEN,
+    openclaw: !!(OPENCLAW_GATEWAY_URL && OPENCLAW_HOOK_TOKEN),
   });
 });
 
@@ -171,9 +245,13 @@ app.post("/api/messages", authMiddleware, async function (req, res) {
 
   if (error) return res.status(500).json({ error: error.message });
 
-  const replyText = imageUrl
-    ? "照片收到了，很好看！📷"
-    : REPLY_TEXTS[Math.floor(Math.random() * REPLY_TEXTS.length)];
+  let replyText;
+  try {
+    replyText = await getBotReply(req.telegramUser.id, text, imageUrl);
+  } catch (err) {
+    console.error("OpenClaw error:", err.message);
+    return res.status(502).json({ error: "妞妞太郎暫時無法回覆：" + err.message });
+  }
 
   const { data: botMsg, error: botError } = await supabase
     .from("messages")
