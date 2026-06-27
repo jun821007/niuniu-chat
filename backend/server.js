@@ -85,7 +85,7 @@ function authMiddleware(req, res, next) {
   }
 
   if (process.env.ALLOW_DEV_USER === "true") {
-    req.telegramUser = { id: 0, first_name: "Dev" };
+    req.telegramUser = { id: 999999999, first_name: "Dev" };
     return next();
   }
 
@@ -93,12 +93,12 @@ function authMiddleware(req, res, next) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  req.telegramUser = { id: 0, first_name: "Dev" };
+  req.telegramUser = { id: 999999999, first_name: "Dev" };
   next();
 }
 
 async function upsertUser(user) {
-  if (!supabase || !user.id) return;
+  if (!supabase || user.id === undefined || user.id === null) return;
   await supabase.from("users").upsert({
     id: user.id,
     first_name: user.first_name || null,
